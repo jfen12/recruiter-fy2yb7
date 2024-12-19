@@ -1,0 +1,140 @@
+# Kubernetes version: v1.24+
+# Purpose: Web application frontend deployment configuration for RefactorTrack
+
+---
+# Deployment configuration for the web application
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  namespace: refactortrack
+  labels:
+    app: web-app
+    component: frontend
+    version: latest
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "80"
+    prometheus.io/path: "/metrics"
+spec:
+  replicas: 2  # Initial replica count, will be managed by HPA
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # Maximum number of pods above desired count
+      maxUnavailable: 0  # Never have less than desired pods during update
+  selector:
+    matchLabels:
+      app: web-app
+  template:
+    metadata:
+      labels:
+        app: web-app
+        version: latest
+    spec:
+      containers:
+      - name: web-app
+        image: refactortrack/web-app:latest
+        ports:
+        - containerPort: 80
+          protocol: TCP
+          name: http
+        resources:
+          requests:
+            cpu: 100m     # Base CPU request
+            memory: 128Mi # Base memory request
+          limits:
+            cpu: 500m     # Maximum CPU limit
+            memory: 512Mi # Maximum memory limit
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 101  # Non-root user ID
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+
+---
+# Service configuration for the web application
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app-service
+  namespace: refactortrack
+  labels:
+    app: web-app
+    component: frontend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: web-app
+
+---
+# Horizontal Pod Autoscaler configuration
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web-app-hpa
+  namespace: refactortrack
+  labels:
+    app: web-app
+    component: frontend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-app
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+---
+# Pod Disruption Budget for high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web-app-pdb
+  namespace: refactortrack
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: web-app
