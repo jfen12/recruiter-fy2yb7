@@ -1,0 +1,214 @@
+syntax = "proto3";
+
+// Import standard protobuf types
+import "google/protobuf/timestamp.proto";  // v3.0
+import "google/protobuf/wrappers.proto";   // v3.0
+
+// Package declaration
+package refactortrack.requisition;
+
+// Language-specific options
+option go_package = "./pb";
+option java_package = "com.refactortrack.requisition";
+
+// Requisition status enum
+enum RequisitionStatus {
+  REQUISITION_STATUS_UNSPECIFIED = 0;
+  REQUISITION_STATUS_DRAFT = 1;
+  REQUISITION_STATUS_OPEN = 2;
+  REQUISITION_STATUS_IN_PROGRESS = 3;
+  REQUISITION_STATUS_ON_HOLD = 4;
+  REQUISITION_STATUS_CLOSED = 5;
+  REQUISITION_STATUS_CANCELLED = 6;
+}
+
+// Priority level enum
+enum PriorityLevel {
+  PRIORITY_LEVEL_UNSPECIFIED = 0;
+  PRIORITY_LEVEL_LOW = 1;
+  PRIORITY_LEVEL_MEDIUM = 2;
+  PRIORITY_LEVEL_HIGH = 3;
+  PRIORITY_LEVEL_URGENT = 4;
+}
+
+// Proficiency level enum
+enum ProficiencyLevel {
+  PROFICIENCY_LEVEL_UNSPECIFIED = 0;
+  PROFICIENCY_LEVEL_BEGINNER = 1;
+  PROFICIENCY_LEVEL_INTERMEDIATE = 2;
+  PROFICIENCY_LEVEL_ADVANCED = 3;
+  PROFICIENCY_LEVEL_EXPERT = 4;
+}
+
+// Location requirements message
+message LocationRequirements {
+  string city = 1;
+  string state = 2;
+  string country = 3;
+  bool remote_allowed = 4;
+  bool hybrid_allowed = 5;
+  repeated string time_zones = 6;
+  google.protobuf.StringValue travel_percentage = 7;
+}
+
+// Required skill message
+message RequiredSkill {
+  string skill_id = 1;
+  int32 minimum_years = 2;
+  ProficiencyLevel required_level = 3;
+  bool is_mandatory = 4;
+  float weight = 5;
+  string notes = 6;
+  bool certification_required = 7;
+}
+
+// Main requisition message
+message Requisition {
+  string id = 1;
+  string title = 2;
+  string client_id = 3;
+  string description = 4;
+  repeated RequiredSkill required_skills = 5;
+  RequisitionStatus status = 6;
+  double rate = 7;
+  double max_rate = 8;
+  google.protobuf.Timestamp deadline = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+  string hiring_manager_id = 12;
+  PriorityLevel priority_level = 13;
+  LocationRequirements location_requirements = 14;
+}
+
+// Request/Response messages for service methods
+message CreateRequisitionRequest {
+  Requisition requisition = 1;
+}
+
+message CreateRequisitionResponse {
+  string requisition_id = 1;
+  Requisition requisition = 2;
+}
+
+message GetRequisitionRequest {
+  string requisition_id = 1;
+}
+
+message GetRequisitionResponse {
+  Requisition requisition = 1;
+}
+
+message UpdateRequisitionRequest {
+  string requisition_id = 1;
+  Requisition requisition = 2;
+}
+
+message UpdateRequisitionResponse {
+  Requisition requisition = 1;
+}
+
+message DeleteRequisitionRequest {
+  string requisition_id = 1;
+}
+
+message DeleteRequisitionResponse {
+  bool success = 1;
+}
+
+message ListRequisitionsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string client_id = 3;
+  RequisitionStatus status = 4;
+}
+
+message ListRequisitionsResponse {
+  repeated Requisition requisitions = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+message SearchRequisitionsRequest {
+  string query = 1;
+  repeated string skills = 2;
+  repeated RequisitionStatus statuses = 3;
+  google.protobuf.DoubleValue min_rate = 4;
+  google.protobuf.DoubleValue max_rate = 5;
+  int32 page_size = 6;
+  string page_token = 7;
+}
+
+message SearchRequisitionsResponse {
+  repeated Requisition requisitions = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+message BulkUpdateRequisitionsRequest {
+  repeated string requisition_ids = 1;
+  RequisitionStatus new_status = 2;
+}
+
+message BulkUpdateRequisitionsResponse {
+  repeated string updated_requisition_ids = 1;
+  repeated string failed_requisition_ids = 2;
+}
+
+message RequisitionStats {
+  map<string, int32> status_counts = 1;
+  int32 total_active = 2;
+  int32 total_urgent = 3;
+  double average_time_to_fill = 4;
+  double fill_rate = 5;
+}
+
+message GetRequisitionStatsRequest {
+  string client_id = 1;
+  google.protobuf.Timestamp start_date = 2;
+  google.protobuf.Timestamp end_date = 3;
+}
+
+message GetRequisitionStatsResponse {
+  RequisitionStats stats = 1;
+}
+
+message UpdateRequisitionStatusRequest {
+  string requisition_id = 1;
+  RequisitionStatus new_status = 2;
+  string reason = 3;
+}
+
+message UpdateRequisitionStatusResponse {
+  Requisition requisition = 1;
+  google.protobuf.Timestamp status_updated_at = 2;
+}
+
+// Requisition service definition
+service RequisitionService {
+  // Create a new requisition
+  rpc CreateRequisition(CreateRequisitionRequest) returns (CreateRequisitionResponse) {}
+  
+  // Get a requisition by ID
+  rpc GetRequisition(GetRequisitionRequest) returns (GetRequisitionResponse) {}
+  
+  // Update an existing requisition
+  rpc UpdateRequisition(UpdateRequisitionRequest) returns (UpdateRequisitionResponse) {}
+  
+  // Delete a requisition
+  rpc DeleteRequisition(DeleteRequisitionRequest) returns (DeleteRequisitionResponse) {}
+  
+  // List requisitions with filtering and pagination
+  rpc ListRequisitions(ListRequisitionsRequest) returns (ListRequisitionsResponse) {}
+  
+  // Search requisitions with advanced criteria
+  rpc SearchRequisitions(SearchRequisitionsRequest) returns (SearchRequisitionsResponse) {}
+  
+  // Bulk update requisitions
+  rpc BulkUpdateRequisitions(BulkUpdateRequisitionsRequest) returns (BulkUpdateRequisitionsResponse) {}
+  
+  // Get requisition statistics
+  rpc GetRequisitionStats(GetRequisitionStatsRequest) returns (GetRequisitionStatsResponse) {}
+  
+  // Update requisition status
+  rpc UpdateRequisitionStatus(UpdateRequisitionStatusRequest) returns (UpdateRequisitionStatusResponse) {}
+}
