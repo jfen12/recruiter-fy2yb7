@@ -1,0 +1,46 @@
+{
+  "version": "independent",
+  "npmClient": "npm",
+  "useWorkspaces": true,
+  "packages": [
+    "services/*"
+  ],
+  "command": {
+    "publish": {
+      "conventionalCommits": true,
+      "message": "chore(release): publish",
+      "registry": "https://registry.npmjs.org/",
+      "allowBranch": [
+        "main",
+        "develop"
+      ],
+      "ignoreChanges": [
+        "**/*.md",
+        "**/tests/**",
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ]
+    },
+    "version": {
+      "conventionalCommits": true,
+      "message": "chore(release): version packages",
+      "allowBranch": [
+        "main",
+        "develop"
+      ],
+      "ignoreChanges": [
+        "**/*.md",
+        "**/tests/**",
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ]
+    },
+    "bootstrap": {
+      "npmClientArgs": [
+        "--no-package-lock"
+      ],
+      "hoist": true,
+      "noCi": false
+    }
+  }
+}
