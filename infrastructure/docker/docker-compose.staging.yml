@@ -1,0 +1,164 @@
+version: "3.9"
+
+services:
+  # Web Application Service
+  web:
+    image: refactortrack-web:staging
+    build:
+      context: ../../src/web
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: staging
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - NODE_ENV=staging
+      - API_TIMEOUT=30000
+      - MAX_PAYLOAD_SIZE=10mb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        window: 120s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    secrets:
+      - source: ssl_certificate
+        target: /etc/nginx/ssl/staging.crt
+      - source: ssl_private_key
+        target: /etc/nginx/ssl/staging.key
+    networks:
+      - refactortrack_staging
+
+  # Elasticsearch Service
+  elasticsearch:
+    image: elasticsearch:8.0
+    environment:
+      - node.name=es01
+      - cluster.name=refactortrack-staging
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - refactortrack_staging
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'status.*green'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    volumes:
+      - prometheus_data:/prometheus
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    networks:
+      - refactortrack_staging
+    deploy:
+      placement:
+        constraints:
+          - node.role==manager
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:9.5.0
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_admin_password
+      - GF_SERVER_ROOT_URL=https://grafana.staging.refactortrack.com
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+    configs:
+      - source: grafana_config
+        target: /etc/grafana/grafana.ini
+    networks:
+      - refactortrack_staging
+    depends_on:
+      - prometheus
+    deploy:
+      placement:
+        constraints:
+          - node.role==manager
+
+volumes:
+  elasticsearch_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: /data/elasticsearch
+      o: bind
+  prometheus_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: /data/prometheus
+      o: bind
+  grafana_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: /data/grafana
+      o: bind
+
+networks:
+  refactortrack_staging:
+    driver: overlay
+    driver_opts:
+      encrypted: "true"
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+    internal: true
+
+secrets:
+  ssl_certificate:
+    file: ./certs/staging.crt
+  ssl_private_key:
+    file: ./certs/staging.key
+  grafana_admin_password:
+    file: ./secrets/grafana_admin_password.txt
+
+configs:
+  prometheus_config:
+    file: ./config/prometheus/prometheus.yml
+  grafana_config:
+    file: ./config/grafana/grafana.ini
