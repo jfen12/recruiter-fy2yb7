@@ -1,0 +1,213 @@
+# Kibana Deployment and Service configuration for RefactorTrack centralized logging
+# Version: Kibana 8.0
+# Dependencies: 
+# - kubernetes v1.24+
+# - elasticsearch service from ./elasticsearch.yaml
+
+---
+# Kibana Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: refactortrack
+  labels:
+    app: refactortrack
+    component: logging
+    service: kibana
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "5601"
+    prometheus.io/path: "/metrics"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: refactortrack
+      component: logging
+      service: kibana
+  template:
+    metadata:
+      labels:
+        app: refactortrack
+        component: logging
+        service: kibana
+    spec:
+      # Security context for running as non-root
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      # Pod anti-affinity to spread across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: refactortrack
+                  component: logging
+                  service: kibana
+              topologyKey: kubernetes.io/hostname
+
+      # Wait for Elasticsearch to be ready
+      initContainers:
+      - name: wait-for-elasticsearch
+        image: busybox:1.28
+        command:
+        - sh
+        - -c
+        - until wget -q -T 2 http://elasticsearch:9200/_cluster/health; do echo waiting for elasticsearch; sleep 2; done;
+
+      containers:
+      - name: kibana
+        image: kibana:8.0
+        ports:
+        - containerPort: 5601
+          name: http
+        env:
+        - name: ELASTICSEARCH_HOSTS
+          value: "http://elasticsearch:9200"
+        - name: SERVER_NAME
+          value: "refactortrack-kibana"
+        - name: MONITORING_ENABLED
+          value: "true"
+        - name: XPACK_SECURITY_ENABLED
+          value: "true"
+        - name: XPACK_REPORTING_ENABLED
+          value: "true"
+        - name: XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY
+          valueFrom:
+            secretKeyRef:
+              name: kibana-secrets
+              key: encryptionKey
+        - name: ELASTICSEARCH_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: kibana-secrets
+              key: elasticUsername
+        - name: ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: kibana-secrets
+              key: elasticPassword
+        
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1"
+            memory: "2Gi"
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /api/status
+            port: 5601
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/status
+            port: 5601
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        
+        volumeMounts:
+        - name: kibana-data
+          mountPath: /usr/share/kibana/data
+        - name: kibana-config
+          mountPath: /usr/share/kibana/config/kibana.yml
+          subPath: kibana.yml
+      
+      volumes:
+      - name: kibana-data
+        emptyDir: {}
+      - name: kibana-config
+        configMap:
+          name: kibana-config
+
+---
+# Kibana Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  namespace: refactortrack
+  labels:
+    app: refactortrack
+    component: logging
+    service: kibana
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5601
+    targetPort: 5601
+    protocol: TCP
+    name: http
+  selector:
+    app: refactortrack
+    component: logging
+    service: kibana
+
+---
+# Network Policy for Kibana
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kibana-network-policy
+  namespace: refactortrack
+spec:
+  podSelector:
+    matchLabels:
+      app: refactortrack
+      component: logging
+      service: kibana
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: refactortrack
+    ports:
+    - port: 5601
+      protocol: TCP
+
+---
+# ConfigMap for Kibana configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kibana-config
+  namespace: refactortrack
+data:
+  kibana.yml: |
+    server.name: refactortrack-kibana
+    server.host: "0.0.0.0"
+    elasticsearch.hosts: ["http://elasticsearch:9200"]
+    monitoring.ui.container.elasticsearch.enabled: true
+    xpack.security.enabled: true
+    xpack.reporting.enabled: true
+    xpack.reporting.capture.browser.chromium.disableSandbox: true
+    logging.appenders.file.type: file
+    logging.appenders.file.fileName: /usr/share/kibana/data/kibana.log
+    logging.appenders.file.layout.type: pattern
+
+---
+# Pod Disruption Budget for Kibana
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kibana-pdb
+  namespace: refactortrack
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: refactortrack
+      component: logging
+      service: kibana
