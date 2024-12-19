@@ -1,0 +1,194 @@
+name: CRM Service CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/backend/services/crm/**'
+      - '.github/workflows/crm-service.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/backend/services/crm/**'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18.x'
+  ECR_REPOSITORY: crm-service
+  IMAGE_TAG: ${{ github.sha }}
+  DD_ENV: production
+  AWS_REGION: us-east-1
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  security-events: write
+
+jobs:
+  test:
+    name: Test and Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: src/backend/services/crm/yarn.lock
+
+      - name: Install dependencies
+        working-directory: src/backend/services/crm
+        run: |
+          yarn install --frozen-lockfile
+          yarn add -D snyk
+
+      - name: Run security scan
+        uses: snyk/actions/node@v3
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+      - name: Run linting
+        working-directory: src/backend/services/crm
+        run: yarn lint
+
+      - name: Run unit tests with coverage
+        working-directory: src/backend/services/crm
+        run: yarn test:coverage
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+
+      - name: Upload test coverage to DataDog
+        uses: datadog/action-ci-visibility@v1
+        with:
+          api-key: ${{ secrets.DD_API_KEY }}
+          files: src/backend/services/crm/coverage/lcov.info
+
+  build:
+    name: Build and Scan Container
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          buildkitd-flags: --debug
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and push image
+        uses: docker/build-push-action@v4
+        with:
+          context: src/backend/services/crm
+          file: src/backend/services/crm/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ secrets.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_VERSION=${{ env.IMAGE_TAG }}
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+            VCS_REF=${{ github.sha }}
+
+      - name: Run Snyk container scan
+        uses: snyk/actions/docker@v3
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: ${{ secrets.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          args: --file=src/backend/services/crm/Dockerfile --severity-threshold=high
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ secrets.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          format: spdx-json
+          output-file: sbom.json
+
+  deploy:
+    name: Deploy to ECS
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://api.refactortrack.com/crm
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition crm-service \
+            --query taskDefinition > task-definition.json
+
+      - name: Update ECS service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          service: crm-service
+          cluster: production
+          wait-for-service-stability: true
+          force-new-deployment: true
+
+      - name: Verify deployment health
+        run: |
+          aws ecs wait services-stable \
+            --cluster production \
+            --services crm-service
+
+      - name: Configure auto-scaling
+        run: |
+          aws application-autoscaling register-scalable-target \
+            --service-namespace ecs \
+            --scalable-dimension ecs:service:DesiredCount \
+            --resource-id service/production/crm-service \
+            --min-capacity 2 \
+            --max-capacity 10
+
+      - name: Setup monitoring alerts
+        run: |
+          aws cloudwatch put-metric-alarm \
+            --alarm-name crm-service-cpu-high \
+            --alarm-description "CPU utilization high" \
+            --metric-name CPUUtilization \
+            --namespace AWS/ECS \
+            --statistic Average \
+            --period 300 \
+            --threshold 70 \
+            --comparison-operator GreaterThanThreshold \
+            --dimensions Name=ServiceName,Value=crm-service Name=ClusterName,Value=production \
+            --evaluation-periods 2 \
+            --alarm-actions ${{ secrets.SNS_ALERT_TOPIC }}
+
+      - name: Notify deployment status
+        if: always()
+        uses: slackapi/slack-github-action@v1
+        with:
+          channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+          slack-message: "CRM Service Deployment ${{ job.status }}\nEnvironment: Production\nVersion: ${{ env.IMAGE_TAG }}"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
