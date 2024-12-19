@@ -1,0 +1,71 @@
+{
+  "compilerOptions": {
+    // ECMAScript target and module configuration
+    "target": "ES2022",
+    "module": "CommonJS",
+    "lib": ["ES2022"],
+    
+    // Module resolution configuration
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["./services/shared/*"]
+    },
+    
+    // Type checking and strict rules
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "checkJs": true,
+    "allowJs": true,
+    
+    // Declaration and source map generation
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    
+    // Project references and incremental builds
+    "composite": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    
+    // Decorator support for dependency injection
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    
+    // JSON module support
+    "resolveJsonModule": true,
+    
+    // Type definitions configuration
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
+    "types": [
+      "node",
+      "jest",
+      "express"
+    ]
+  },
+  
+  // Project references
+  "references": [
+    {
+      "path": "./services/shared"
+    }
+  ],
+  
+  // Files to include/exclude
+  "include": [
+    "services/**/*.ts",
+    "services/**/*.json"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "tests"
+  ]
+}
