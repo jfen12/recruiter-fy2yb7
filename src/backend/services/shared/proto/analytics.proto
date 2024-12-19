@@ -1,0 +1,191 @@
+syntax = "proto3";
+
+package refactortrack.analytics;
+
+import "google/protobuf/timestamp.proto";  // v3.0.0
+import "google/protobuf/empty.proto";      // v3.0.0
+import "./candidate.proto";                // Internal import
+import "./requisition.proto";              // Internal import
+
+option go_package = "./analytics";
+option java_package = "com.refactortrack.analytics";
+
+// Time period for trend analysis
+enum TimePeriod {
+  TIME_PERIOD_UNSPECIFIED = 0;
+  TIME_PERIOD_DAILY = 1;
+  TIME_PERIOD_WEEKLY = 2;
+  TIME_PERIOD_MONTHLY = 3;
+  TIME_PERIOD_QUARTERLY = 4;
+  TIME_PERIOD_YEARLY = 5;
+}
+
+// Message for client satisfaction metrics
+message ClientSatisfactionMetrics {
+  double average_satisfaction_score = 1;
+  double requisition_fulfillment_rate = 2;
+  double candidate_quality_score = 3;
+  double time_to_hire_satisfaction = 4;
+  map<string, double> satisfaction_by_category = 5;
+}
+
+// Message for percentile-based metrics
+message PercentileMetrics {
+  double p25 = 1;
+  double p50 = 2;
+  double p75 = 3;
+  double p90 = 4;
+  double p95 = 5;
+}
+
+// Message for stage-wise recruitment metrics
+message StageMetrics {
+  string stage_name = 1;
+  double average_duration = 2;
+  double median_duration = 3;
+  PercentileMetrics duration_percentiles = 4;
+  int32 total_candidates = 5;
+  double conversion_rate = 6;
+}
+
+// Message for regional performance metrics
+message RegionalMetrics {
+  string region = 1;
+  int32 total_requisitions = 2;
+  int32 filled_requisitions = 3;
+  double average_time_to_hire = 4;
+  double fill_rate = 5;
+  map<string, double> skill_demand = 6;
+}
+
+// Message for trend analysis
+message TrendAnalysis {
+  TimePeriod period = 1;
+  repeated TrendPoint data_points = 2;
+  double trend_coefficient = 3;
+  double seasonality_index = 4;
+  double confidence_interval = 5;
+}
+
+// Message for individual trend data points
+message TrendPoint {
+  google.protobuf.Timestamp timestamp = 1;
+  double value = 2;
+  double moving_average = 3;
+  double standard_deviation = 4;
+}
+
+// Message for skill demand analysis
+message SkillDemand {
+  string skill_name = 1;
+  int32 requisition_count = 2;
+  double demand_growth_rate = 3;
+  double average_required_experience = 4;
+  map<string, int32> demand_by_region = 5;
+}
+
+// Message for skill availability analysis
+message SkillAvailability {
+  string skill_name = 1;
+  int32 candidate_count = 2;
+  double average_experience = 3;
+  PercentileMetrics experience_distribution = 4;
+  map<string, int32> availability_by_region = 5;
+}
+
+// Message for skill market demand analysis
+message SkillMarketDemand {
+  string skill_name = 1;
+  double demand_index = 2;
+  double supply_demand_ratio = 3;
+  double market_competitiveness = 4;
+  TrendAnalysis demand_trend = 5;
+}
+
+// Message for skill salary range analysis
+message SkillSalaryRange {
+  string skill_name = 1;
+  double average_rate = 2;
+  PercentileMetrics rate_distribution = 3;
+  map<string, double> rate_by_experience = 4;
+  map<string, double> rate_by_region = 5;
+}
+
+// Message for skill gap analysis
+message SkillGap {
+  string skill_name = 1;
+  int32 demand_count = 2;
+  int32 supply_count = 3;
+  double gap_index = 4;
+  double projected_growth = 5;
+  map<string, double> gap_by_region = 6;
+}
+
+// Request message for recruitment metrics
+message GetRecruitmentMetricsRequest {
+  google.protobuf.Timestamp start_date = 1;
+  google.protobuf.Timestamp end_date = 2;
+  repeated string regions = 3;
+  repeated string skill_categories = 4;
+  TimePeriod trend_period = 5;
+}
+
+// Response message for recruitment metrics
+message RecruitmentMetrics {
+  int32 total_requisitions = 1;
+  int32 filled_requisitions = 2;
+  double average_time_to_hire = 3;
+  ClientSatisfactionMetrics client_satisfaction_metrics = 4;
+  TrendAnalysis trend_analysis = 5;
+  repeated RegionalMetrics regional_breakdown = 6;
+  google.protobuf.Timestamp period_start = 7;
+  google.protobuf.Timestamp period_end = 8;
+}
+
+// Request message for time-to-hire analytics
+message TimeToHireRequest {
+  google.protobuf.Timestamp start_date = 1;
+  google.protobuf.Timestamp end_date = 2;
+  repeated string requisition_types = 3;
+  repeated string regions = 4;
+  TimePeriod trend_period = 5;
+}
+
+// Response message for time-to-hire analytics
+message TimeToHireAnalytics {
+  double average_days = 1;
+  double median_days = 2;
+  PercentileMetrics percentile_breakdown = 3;
+  repeated StageMetrics stage_wise_breakdown = 4;
+  TrendAnalysis trend_data = 5;
+}
+
+// Request message for skills analytics
+message SkillsAnalyticsRequest {
+  repeated string skill_categories = 1;
+  repeated string regions = 2;
+  google.protobuf.Timestamp start_date = 3;
+  google.protobuf.Timestamp end_date = 4;
+  TimePeriod trend_period = 5;
+}
+
+// Response message for skills analytics
+message SkillsAnalytics {
+  repeated SkillDemand skill_demand = 1;
+  repeated SkillAvailability skill_availability = 2;
+  repeated SkillMarketDemand market_demand_index = 3;
+  repeated SkillSalaryRange salary_range_analysis = 4;
+  repeated SkillGap skill_gaps = 5;
+}
+
+// Analytics service definition
+service AnalyticsService {
+  // Retrieves comprehensive recruitment metrics
+  rpc GetRecruitmentMetrics(GetRecruitmentMetricsRequest) returns (RecruitmentMetrics) {}
+
+  // Provides detailed time-to-hire analytics
+  rpc GetTimeToHireAnalytics(TimeToHireRequest) returns (TimeToHireAnalytics) {}
+
+  // Analyzes skill demand and market trends
+  rpc GetSkillsAnalytics(SkillsAnalyticsRequest) returns (SkillsAnalytics) {}
+}
