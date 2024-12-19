@@ -1,0 +1,161 @@
+name: Gateway Service CI/CD
+
+# Trigger workflow on push/PR to main branch for gateway service changes
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/backend/services/gateway/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/backend/services/gateway/**'
+
+# Environment configuration
+env:
+  NODE_VERSION: '18'
+  DOCKER_BUILDKIT: '1'
+  SERVICE_NAME: 'gateway'
+  CACHE_KEY_PREFIX: 'gateway-service'
+
+# Production environment configuration
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Full history for better caching
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: src/backend/services/gateway/package-lock.json
+          
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.npm
+            src/backend/services/gateway/node_modules
+          key: ${{ env.CACHE_KEY_PREFIX }}-${{ hashFiles('src/backend/services/gateway/package-lock.json') }}
+          
+      - name: Install dependencies
+        working-directory: src/backend/services/gateway
+        run: npm ci
+        
+      - name: Run linting
+        working-directory: src/backend/services/gateway
+        run: npm run lint
+        
+      - name: Run tests with coverage
+        working-directory: src/backend/services/gateway
+        run: npm test
+        
+      - name: Upload test coverage
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: src/backend/services/gateway/coverage
+          
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@v3
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+  build-and-push:
+    name: Build and Push Container
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        
+      - name: Login to Docker Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.DOCKER_REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          
+      - name: Build and push image
+        uses: docker/build-push-action@v4
+        with:
+          context: src/backend/services/gateway
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_REGISTRY }}/gateway:latest
+            ${{ secrets.DOCKER_REGISTRY }}/gateway:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_REGISTRY }}/gateway:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_REGISTRY }}/gateway:buildcache,mode=max
+          build-args: |
+            NODE_VERSION=${{ env.NODE_VERSION }}
+            BUILD_VERSION=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.sha }}
+            
+      - name: Scan container image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKER_REGISTRY }}/gateway:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+  deploy:
+    name: Deploy to Production
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://api.refactortrack.com
+    
+    steps:
+      - name: Deploy to production
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USERNAME }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            # Pull latest image
+            docker pull ${{ secrets.DOCKER_REGISTRY }}/gateway:${{ github.sha }}
+            
+            # Deploy with zero downtime
+            docker-compose -f docker-compose.prod.yml pull gateway
+            docker-compose -f docker-compose.prod.yml up -d --no-deps gateway
+            
+            # Health check
+            timeout 60s bash -c 'while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' http://localhost:3000/health)" != "200" ]]; do sleep 5; done' || {
+              echo "Health check failed - rolling back"
+              docker-compose -f docker-compose.prod.yml rollback gateway
+              exit 1
+            }
+            
+            # Cleanup old images
+            docker image prune -f --filter "until=24h"
+
+      - name: Notify deployment status
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
