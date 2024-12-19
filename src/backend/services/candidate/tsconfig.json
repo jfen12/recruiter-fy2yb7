@@ -1,0 +1,59 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // Output configuration
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": "./src",
+    
+    // Path aliases for clean imports
+    "paths": {
+      "@/*": ["*"],
+      "@shared/*": ["../../shared/*"]
+    },
+    
+    // Build optimization
+    "composite": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    
+    // Type declaration generation
+    "declaration": true,
+    "sourceMap": true,
+    
+    // Type definitions
+    "types": [
+      "node",
+      "jest",
+      "express"
+    ],
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
+    
+    // Decorator support for dependency injection
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  
+  // Project references
+  "references": [
+    {
+      "path": "../shared"
+    }
+  ],
+  
+  // Files to include/exclude
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.json"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "coverage"
+  ]
+}
