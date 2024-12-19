@@ -1,0 +1,118 @@
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+.yarn/
+.pnp.*
+
+# Version Control
+.git/
+.gitignore
+.gitattributes
+
+# Environment & Security
+.env
+.env.*
+.env.local
+.env.development
+.env.test
+.env.production
+*.pem
+*.key
+*.cert
+
+# Documentation & Metadata
+*.md
+README.md
+LICENSE
+CHANGELOG.md
+docs/
+CONTRIBUTING.md
+
+# Logs & Debug
+*.log
+logs/
+debug/
+.debug/
+
+# Testing
+coverage/
+tests/
+__tests__/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+jest.config.ts
+test-results/
+.nyc_output/
+
+# Build & Output
+dist/
+build/
+.next/
+out/
+.cache/
+.webpack/
+*.tsbuildinfo
+
+# IDE & System
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+Thumbs.db
+.project
+.classpath
+.settings/
+
+# Configuration
+.eslintrc*
+.prettierrc*
+.stylelintrc*
+tsconfig.json
+tsconfig.*.json
+babel.config.js
+postcss.config.js
+tailwind.config.js
+.editorconfig
+.dockerignore
+Dockerfile*
+docker-compose*
+
+# Development Tools
+.husky/
+.storybook/
+cypress/
+playwright/
+*.config.js
+*.config.ts
+.eslintcache
+.stylelintcache
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Dependencies Analysis
+.dependency-cruiser.js
+.graphqlconfig
+apollo.config.js
+
+# Bundle Analysis
+bundle-stats/
+stats.json
+.bundle-stats/
+
+# Miscellaneous
+.github/
+.gitlab/
+.circleci/
+.azure/
+*.tgz
+*.tar.gz
+*.zip
