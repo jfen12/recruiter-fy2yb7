@@ -1,0 +1,90 @@
+# kubernetes.io/aws-ebs CSI driver v1.24+
+# Purpose: Define storage classes for RefactorTrack's stateful services
+
+---
+# Default storage class for general purpose SSD storage
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: standard-ssd
+  namespace: refactortrack
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+  labels:
+    app: refactortrack
+    environment: production
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp3  # AWS GP3 volume type
+  fsType: ext4
+  encrypted: "true"
+  # GP3 baseline performance: 3000 IOPS, 125 MB/s throughput
+  iops: "3000"
+  throughput: "125"
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+
+---
+# High IOPS storage class for database and search engine workloads
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: high-iops-ssd
+  namespace: refactortrack
+  labels:
+    app: refactortrack
+    environment: production
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: io2  # AWS IO2 volume type for consistent high IOPS
+  iopsPerGB: "50"  # 50 IOPS per GB for high-performance workloads
+  fsType: ext4
+  encrypted: "true"
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+
+---
+# Cache storage class optimized for Redis cluster
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cache-storage
+  namespace: refactortrack
+  labels:
+    app: refactortrack
+    environment: production
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp3
+  fsType: ext4
+  encrypted: "true"
+  # Optimized for cache workloads
+  iops: "16000"  # Maximum GP3 IOPS
+  throughput: "1000"  # Maximum GP3 throughput
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+
+---
+# Document store storage class for MongoDB
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: document-store
+  namespace: refactortrack
+  labels:
+    app: refactortrack
+    environment: production
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp3
+  fsType: ext4
+  encrypted: "true"
+  # Balanced performance for document storage
+  iops: "6000"
+  throughput: "250"
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
