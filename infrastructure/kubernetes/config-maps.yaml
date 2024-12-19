@@ -1,0 +1,166 @@
+# Kubernetes ConfigMaps for RefactorTrack Application Services
+# Version: 1.0
+# Kubernetes Version: v1.24+
+
+---
+# Analytics Service Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: analytics-config
+  namespace: refactortrack
+  labels:
+    app: analytics-service
+    component: config
+    environment: ${ENVIRONMENT}
+    managed-by: kubernetes
+data:
+  # Database Configuration
+  postgres-host: postgres-analytics.${NAMESPACE}.svc.cluster.local
+  postgres-port: "5432"
+  postgres-database: analytics_db
+  
+  # Elasticsearch Configuration
+  elasticsearch-hosts: elasticsearch-service:9200
+  
+  # MongoDB Configuration
+  mongodb-uri: mongodb://mongodb-service:27017/analytics
+  
+  # Application Settings
+  log-level: info
+  metrics-port: "8000"
+  metrics-path: /metrics
+  health-check-path: /health
+  tracing-enabled: "true"
+  max-connections: "100"
+  idle-timeout: "300"
+
+---
+# Candidate Service Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: candidate-config
+  namespace: refactortrack
+  labels:
+    app: candidate-service
+    component: config
+    environment: ${ENVIRONMENT}
+    managed-by: kubernetes
+data:
+  # Database Configuration
+  postgres-host: postgres-candidate.${NAMESPACE}.svc.cluster.local
+  postgres-port: "5432"
+  postgres-database: candidate_db
+  
+  # Search Configuration
+  elasticsearch-hosts: elasticsearch-service:9200
+  
+  # Cache Configuration
+  redis-host: redis-service
+  redis-port: "6379"
+  redis-ttl: "3600"
+  
+  # Application Settings
+  log-level: info
+  metrics-port: "8000"
+  metrics-path: /metrics
+  health-check-path: /health
+  resume-storage-path: /data/resumes
+  max-file-size: 10MB
+  allowed-file-types: pdf,doc,docx
+
+---
+# Requisition Service Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: requisition-config
+  namespace: refactortrack
+  labels:
+    app: requisition-service
+    component: config
+    environment: ${ENVIRONMENT}
+    managed-by: kubernetes
+data:
+  # Database Configuration
+  postgres-host: postgres-requisition.${NAMESPACE}.svc.cluster.local
+  postgres-port: "5432"
+  postgres-database: requisition_db
+  
+  # Cache Configuration
+  redis-host: redis-service
+  redis-port: "6379"
+  redis-ttl: "1800"
+  
+  # Application Settings
+  log-level: info
+  metrics-port: "8000"
+  metrics-path: /metrics
+  health-check-path: /health
+  max-active-requisitions: "1000"
+  requisition-ttl-days: "90"
+  matching-threshold: "0.75"
+
+---
+# CRM Service Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crm-config
+  namespace: refactortrack
+  labels:
+    app: crm-service
+    component: config
+    environment: ${ENVIRONMENT}
+    managed-by: kubernetes
+data:
+  # Database Configuration
+  postgres-host: postgres-crm.${NAMESPACE}.svc.cluster.local
+  postgres-port: "5432"
+  postgres-database: crm_db
+  
+  # Cache Configuration
+  redis-host: redis-service
+  redis-port: "6379"
+  redis-ttl: "3600"
+  
+  # Application Settings
+  log-level: info
+  metrics-port: "8000"
+  metrics-path: /metrics
+  health-check-path: /health
+  client-cache-ttl: "3600"
+  contact-sync-interval: "900"
+  max-contacts-per-client: "100"
+
+---
+# Web UI Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-ui-config
+  namespace: refactortrack
+  labels:
+    app: web-ui
+    component: config
+    environment: ${ENVIRONMENT}
+    managed-by: kubernetes
+data:
+  # API Gateway Configuration
+  api-gateway-url: http://api-gateway.${NAMESPACE}.svc.cluster.local
+  
+  # Application Settings
+  log-level: info
+  metrics-port: "8000"
+  metrics-path: /metrics
+  health-check-path: /health
+  session-timeout: "1800"
+  max-upload-size: 10MB
+  supported-locales: en-US
+  default-locale: en-US
+  
+  # Feature Flags
+  enable-analytics-dashboard: "true"
+  enable-bulk-operations: "true"
+  enable-advanced-search: "true"
