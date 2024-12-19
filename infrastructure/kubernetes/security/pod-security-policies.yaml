@@ -1,0 +1,138 @@
+# kubernetes v1.24+
+# This file defines PodSecurityPolicy resources and associated RBAC configurations
+# for enforcing pod-level security controls across RefactorTrack services
+
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: restricted-policy
+  namespace: refactortrack
+  annotations:
+    # Enforce default runtime security profiles
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'runtime/default,docker/default'
+    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+    seccomp.security.alpha.kubernetes.io/defaultProfileName: 'runtime/default'
+    apparmor.security.beta.kubernetes.io/defaultProfileName: 'runtime/default'
+spec:
+  # Prevent privileged container execution
+  privileged: false
+  allowPrivilegeEscalation: false
+  
+  # Drop all capabilities by default and only allow necessary ones
+  requiredDropCapabilities:
+    - ALL
+  allowedCapabilities:
+    - NET_BIND_SERVICE  # Allow binding to privileged ports
+  
+  # Restrict volume types to only those required
+  volumes:
+    - configMap
+    - emptyDir
+    - projected
+    - secret
+    - downwardAPI
+    - persistentVolumeClaim
+  
+  # Prevent host namespace sharing
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  
+  # Enforce non-root user execution
+  runAsUser:
+    rule: MustRunAsNonRoot
+    ranges:
+      - min: 1000
+        max: 65535
+  
+  # Configure SELinux context
+  seLinux:
+    rule: MustRunAs
+    seLinuxOptions:
+      level: 's0:c123,c456'
+  
+  # Configure supplemental groups
+  supplementalGroups:
+    rule: MustRunAs
+    ranges:
+      - min: 1000
+        max: 65535
+  
+  # Configure filesystem group
+  fsGroup:
+    rule: MustRunAs
+    ranges:
+      - min: 1000
+        max: 65535
+  
+  # Enforce read-only root filesystem
+  readOnlyRootFilesystem: true
+  
+  # Restrict host path mounts to only necessary paths
+  allowedHostPaths:
+    - pathPrefix: /etc/ssl/certs
+      readOnly: true
+  
+  # Restrict sysctls
+  allowedUnsafeSysctls: []
+  forbiddenSysctls:
+    - '*'
+  
+  # Restrict runtime classes
+  runtimeClass:
+    allowedRuntimeClassNames:
+      - runc
+
+---
+# RBAC role for using the PSP
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: psp-restricted-role
+  labels:
+    app.kubernetes.io/name: refactortrack
+    app.kubernetes.io/component: security
+rules:
+  # Allow use of the restricted PSP
+  - apiGroups: ['policy']
+    resources: ['podsecuritypolicies']
+    verbs: ['use']
+    resourceNames: ['restricted-policy']
+  # Allow access to metrics endpoints
+  - apiGroups: ['']
+    resources: ['services/metrics']
+    verbs: ['get']
+  # Allow access to service monitors
+  - apiGroups: ['monitoring.coreos.com']
+    resources: ['servicemonitors']
+    verbs: ['get', 'list', 'watch']
+
+---
+# Bind the PSP role to service accounts
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: psp-restricted-binding
+  labels:
+    app.kubernetes.io/name: refactortrack
+    app.kubernetes.io/component: security
+subjects:
+  - kind: ServiceAccount
+    name: analytics-service
+    namespace: refactortrack
+  - kind: ServiceAccount
+    name: candidate-service
+    namespace: refactortrack
+  - kind: ServiceAccount
+    name: crm-service
+    namespace: refactortrack
+  - kind: ServiceAccount
+    name: requisition-service
+    namespace: refactortrack
+  - kind: ServiceAccount
+    name: gateway-service
+    namespace: refactortrack
+roleRef:
+  kind: ClusterRole
+  name: psp-restricted-role
+  apiGroup: rbac.authorization.k8s.io
