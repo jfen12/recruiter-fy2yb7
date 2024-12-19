@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    
+    <!-- Theme color for browser chrome -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+    
+    <!-- Primary Meta Tags -->
+    <meta name="description" content="RefactorTrack - Advanced Applicant Tracking System for Technology Recruiting">
+    <meta name="keywords" content="ATS, recruiting, technology staffing, job requisitions, candidate management">
+    <meta name="author" content="RefactorTrack">
+    
+    <!-- Open Graph / Social Media Meta Tags -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="RefactorTrack ATS - Technology Recruiting Platform">
+    <meta property="og:description" content="Advanced Applicant Tracking System designed specifically for technology recruiting and staffing agencies">
+    <meta property="og:site_name" content="RefactorTrack">
+    
+    <!-- Security Headers -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.refactortrack.com;">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
+    
+    <!-- Font Preconnect for Performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- Favicons -->
+    <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Fonts and Icons -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    
+    <title>RefactorTrack - Technology Recruiting Platform</title>
+    
+    <!-- Critical CSS Inline Styles -->
+    <style>
+        /* Initial loading state styles */
+        .loading-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #ffffff;
+        }
+        @media (prefers-color-scheme: dark) {
+            .loading-container {
+                background-color: #121212;
+            }
+        }
+        .skip-nav {
+            position: absolute;
+            left: -999px;
+            width: 1px;
+            height: 1px;
+            top: auto;
+        }
+        .skip-nav:focus {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            width: auto;
+            height: auto;
+            padding: 16px;
+            background: #ffffff;
+            z-index: 9999;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+    <!-- Skip Navigation Link for Accessibility -->
+    <a href="#main-content" class="skip-nav">Skip to main content</a>
+    
+    <!-- NoScript Warning -->
+    <noscript>
+        <div role="alert" aria-live="assertive" style="padding: 20px; text-align: center;">
+            You need to enable JavaScript to run this application. Please contact support if you need assistance.
+        </div>
+    </noscript>
+    
+    <!-- React Root Mount Point -->
+    <div id="root" role="main" aria-label="RefactorTrack Application">
+        <!-- Initial Loading State -->
+        <div class="loading-container" aria-label="Loading application">
+            <div role="status">Loading...</div>
+        </div>
+    </div>
+    
+    <!-- React Application Entry Point -->
+    <script type="module" src="./src/index.tsx"></script>
+</body>
+</html>
