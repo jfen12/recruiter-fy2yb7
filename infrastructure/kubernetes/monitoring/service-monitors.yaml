@@ -1,0 +1,59 @@
+# ServiceMonitor Custom Resources for RefactorTrack Microservices
+# Version: v1
+# Dependencies:
+# - kubernetes v1.24+
+# - prometheus-operator v0.68+
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: analytics-monitor
+  namespace: refactortrack
+  labels:
+    app: analytics-service
+    component: monitoring
+    team: platform
+    tier: analytics
+spec:
+  # Target service selection based on labels
+  selector:
+    matchLabels:
+      app: analytics-service
+  
+  # Endpoints configuration for metrics collection
+  endpoints:
+    # Metrics endpoint configuration
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      honorLabels: true
+      
+      # Pod metadata relabeling configuration
+      relabelings:
+        - sourceLabels: ["__meta_kubernetes_pod_name"]
+          targetLabel: "pod"
+          action: replace
+      
+      # TLS configuration for secure metrics collection
+      tlsConfig:
+        insecureSkipVerify: false
+        serverName: analytics-service.refactortrack.svc
+        certFile: /etc/prometheus/certs/client.crt
+        keyFile: /etc/prometheus/certs/client.key
+        caFile: /etc/prometheus/certs/ca.crt
+      
+      # Metric relabeling to drop unnecessary process metrics
+      metricRelabelings:
+        - sourceLabels: ["__name__"]
+          regex: "process_.*"
+          action: drop
+    
+    # Health check endpoint configuration
+    - port: http
+      path: /health
+      interval: 30s
+      scrapeTimeout: 5s
+
+---
+# Additional ServiceMonitor configurations can be added here for other services
