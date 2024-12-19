@@ -1,0 +1,210 @@
+name: Requisition Service CI/CD
+
+# Trigger workflow on push to main, PRs, scheduled runs and manual dispatch
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/backend/services/requisition/**'
+      - '.github/workflows/requisition-service.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/backend/services/requisition/**'
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly security scans
+  workflow_dispatch:  # Manual trigger
+
+# Environment variables available to all jobs
+env:
+  DOCKER_REGISTRY: refactortrack.azurecr.io
+  SERVICE_NAME: requisition-service
+  NODE_VERSION: '18.x'
+  TRIVY_SEVERITY: 'HIGH,CRITICAL'
+
+# Permission configuration
+permissions:
+  contents: read
+  packages: write
+  deployments: write
+  security-events: write
+  id-token: write
+
+# Concurrency control to prevent parallel deployments
+concurrency:
+  group: requisition-service-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: src/backend/services/requisition/package-lock.json
+          
+      - name: Install dependencies
+        working-directory: src/backend/services/requisition
+        run: |
+          npm ci
+          npm audit
+
+      - name: Run ESLint
+        working-directory: src/backend/services/requisition
+        run: npm run lint
+        
+      - name: Run unit tests
+        working-directory: src/backend/services/requisition
+        run: npm run test:ci
+        
+      - name: Upload test coverage
+        uses: codecov/codecov-action@v3
+        with:
+          directory: src/backend/services/requisition/coverage
+          flags: requisition-service
+          
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Run Snyk scan
+        uses: snyk/actions/node@v3
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+          
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.10.0
+        with:
+          scan-type: 'fs'
+          scan-ref: 'src/backend/services/requisition'
+          severity: ${{ env.TRIVY_SEVERITY }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy'
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: security-scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        
+      - name: Login to container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+          
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          context: src/backend/services/requisition
+          file: src/backend/services/requisition/Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+            ${{ env.DOCKER_REGISTRY }}/${{ env.SERVICE_NAME }}:latest
+          cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.SERVICE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.SERVICE_NAME }}:buildcache,mode=max
+          
+      - name: Scan container image
+        uses: aquasecurity/trivy-action@v0.10.0
+        with:
+          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-container-results.sarif'
+          severity: ${{ env.TRIVY_SEVERITY }}
+          
+      - name: Upload container scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-container-results.sarif'
+          category: 'trivy-container'
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: staging
+      url: https://staging-api.refactortrack.com/requisition
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+          
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name refactortrack-staging
+        
+      - name: Deploy to staging (Blue/Green)
+        uses: azure/k8s-deploy@v4
+        with:
+          manifests: |
+            infrastructure/kubernetes/requisition-service.yaml
+          images: |
+            ${{ env.DOCKER_REGISTRY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          strategy: blue-green
+          traffic-split-method: pod
+          
+      - name: Run smoke tests
+        run: |
+          chmod +x ./scripts/smoke-tests.sh
+          ./scripts/smoke-tests.sh https://staging-api.refactortrack.com/requisition
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    environment:
+      name: production
+      url: https://api.refactortrack.com/requisition
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+          
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name refactortrack-production
+        
+      - name: Deploy to production (Blue/Green)
+        uses: azure/k8s-deploy@v4
+        with:
+          manifests: |
+            infrastructure/kubernetes/requisition-service.yaml
+          images: |
+            ${{ env.DOCKER_REGISTRY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          strategy: blue-green
+          traffic-split-method: pod
+          percentage: 10,50,100
+          
+      - name: Monitor deployment health
+        run: |
+          chmod +x ./scripts/monitor-deployment.sh
+          ./scripts/monitor-deployment.sh production requisition-service
