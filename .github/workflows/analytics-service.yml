@@ -1,0 +1,190 @@
+name: Analytics Service CI/CD
+
+# Trigger workflow on push and pull requests to main branch
+# Only when changes are made to analytics service files
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/backend/services/analytics/**'
+      - '.github/workflows/analytics-service.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/backend/services/analytics/**'
+      - '.github/workflows/analytics-service.yml'
+
+# Environment variables used across jobs
+env:
+  DOCKER_REGISTRY: refactortrack.azurecr.io
+  SERVICE_NAME: analytics-service
+  PYTHON_VERSION: '3.11'
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/backend/services/analytics/requirements.txt
+          pip install flake8 mypy pytest pytest-cov pytest-asyncio
+          
+      - name: Run linting
+        run: |
+          flake8 src/backend/services/analytics --count --max-line-length=100 --statistics
+          
+      - name: Run type checking
+        run: |
+          mypy src/backend/services/analytics --ignore-missing-imports
+          
+      - name: Run unit tests
+        run: |
+          pytest src/backend/services/analytics/tests \
+            --cov=src/backend/services/analytics \
+            --cov-report=xml \
+            --cov-report=html \
+            --junitxml=test-results.xml
+            
+      - name: Run Snyk security scan
+        uses: snyk/actions/python@v1
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+          args: --severity-threshold=high
+          
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: |
+            test-results.xml
+            coverage.xml
+            htmlcov
+
+  build:
+    name: Build
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        
+      - name: Login to Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+          
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: src/backend/services/analytics
+          file: src/backend/services/analytics/Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ env.SERVICE_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_REGISTRY }}/${{ env.SERVICE_NAME }}:latest
+          cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.SERVICE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.SERVICE_NAME }}:buildcache,mode=max
+          
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@v0.10.0
+        with:
+          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.SERVICE_NAME }}:${{ env.IMAGE_TAG }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+  deploy:
+    name: Deploy to ${{ matrix.environment }}
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [development, staging, production]
+    environment:
+      name: ${{ matrix.environment }}
+      url: ${{ matrix.environment == 'production' && 'https://refactortrack.com' || format('https://{0}.refactortrack.com', matrix.environment) }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Configure Kubernetes
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+          
+      - name: Deploy to Kubernetes
+        run: |
+          # Update deployment configuration with new image
+          kubectl set image deployment/${{ env.SERVICE_NAME }} \
+            ${{ env.SERVICE_NAME }}=${{ env.DOCKER_REGISTRY }}/${{ env.SERVICE_NAME }}:${{ env.IMAGE_TAG }} \
+            -n refactortrack
+            
+          # Wait for deployment to complete
+          kubectl rollout status deployment/${{ env.SERVICE_NAME }} \
+            -n refactortrack \
+            --timeout=300s
+            
+      - name: Verify deployment health
+        run: |
+          # Wait for pods to be ready
+          kubectl wait --for=condition=ready pod \
+            -l app=${{ env.SERVICE_NAME }} \
+            -n refactortrack \
+            --timeout=300s
+            
+          # Check service health endpoint
+          SERVICE_URL=$(kubectl get service ${{ env.SERVICE_NAME }} \
+            -n refactortrack \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          curl -f http://$SERVICE_URL:8000/health
+          
+      - name: Configure monitoring
+        if: success()
+        run: |
+          # Set up DataDog monitoring
+          kubectl apply -f - <<EOF
+          apiVersion: datadoghq.com/v1alpha1
+          kind: DatadogMonitor
+          metadata:
+            name: ${{ env.SERVICE_NAME }}-health
+            namespace: refactortrack
+          spec:
+            type: service check
+            query: "http.can_connect{service:${{ env.SERVICE_NAME }}} .by(*).last(5).count_by_status()"
+            message: "Service ${{ env.SERVICE_NAME }} is not responding"
+            tags:
+              - "env:${{ matrix.environment }}"
+              - "service:${{ env.SERVICE_NAME }}"
+          EOF
+        env:
+          DD_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+          
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          kubectl rollout undo deployment/${{ env.SERVICE_NAME }} \
+            -n refactortrack
