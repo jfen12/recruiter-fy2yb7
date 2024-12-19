@@ -1,0 +1,166 @@
+syntax = "proto3";
+
+// Import google protobuf types
+// @version 3.0.0
+import "google/protobuf/timestamp.proto";
+// @version 3.0.0
+import "google/protobuf/empty.proto";
+// @version 3.0.0
+import "google/protobuf/wrappers.proto";
+// @version 3.0.0
+import "google/protobuf/field_mask.proto";
+
+package refactortrack.crm;
+
+option go_package = "./crm";
+option java_package = "com.refactortrack.crm";
+option java_multiple_files = true;
+option optimize_for = SPEED;
+
+// Enum defining possible client statuses with additional states
+enum ClientStatus {
+  CLIENT_STATUS_UNSPECIFIED = 0;
+  CLIENT_STATUS_ACTIVE = 1;
+  CLIENT_STATUS_INACTIVE = 2;
+  CLIENT_STATUS_BLACKLISTED = 3;
+  CLIENT_STATUS_ARCHIVED = 4;
+  CLIENT_STATUS_PENDING_APPROVAL = 5;
+}
+
+// Enum defining types of client communications
+enum CommunicationType {
+  COMMUNICATION_TYPE_UNSPECIFIED = 0;
+  COMMUNICATION_TYPE_EMAIL = 1;
+  COMMUNICATION_TYPE_PHONE = 2;
+  COMMUNICATION_TYPE_MEETING = 3;
+  COMMUNICATION_TYPE_NOTE = 4;
+  COMMUNICATION_TYPE_VIDEO_CALL = 5;
+  COMMUNICATION_TYPE_SOCIAL_MEDIA = 6;
+}
+
+// Enum defining specific error codes for CRM operations
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  ERROR_CODE_INVALID_INPUT = 1;
+  ERROR_CODE_NOT_FOUND = 2;
+  ERROR_CODE_ALREADY_EXISTS = 3;
+  ERROR_CODE_PERMISSION_DENIED = 4;
+  ERROR_CODE_STATUS_CONFLICT = 5;
+}
+
+// Message representing contact information
+message Contact {
+  string id = 1;
+  string first_name = 2;
+  string last_name = 3;
+  string email = 4;
+  string phone = 5;
+  string title = 6;
+  bool is_primary = 7;
+  map<string, string> metadata = 8;
+}
+
+// Enhanced message representing a client company with additional fields
+message Client {
+  string id = 1;
+  string company_name = 2;
+  string industry = 3;
+  string website = 4;
+  repeated Contact contacts = 5;
+  ClientStatus status = 6;
+  bool is_deleted = 7;
+  string deletion_reason = 8;
+  string created_by = 9;
+  string updated_by = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  google.protobuf.Timestamp deleted_at = 13;
+  map<string, string> metadata = 14;
+}
+
+// Request message for creating a new client
+message CreateClientRequest {
+  string company_name = 1;
+  string industry = 2;
+  string website = 3;
+  repeated Contact contacts = 4;
+  map<string, string> metadata = 5;
+}
+
+// Request message for batch creating clients
+message BatchCreateClientsRequest {
+  repeated CreateClientRequest clients = 1;
+}
+
+// Response message for batch creating clients
+message BatchCreateClientsResponse {
+  repeated Client clients = 1;
+  repeated Error errors = 2;
+}
+
+// Message representing search criteria
+message SearchCriteria {
+  string company_name_pattern = 1;
+  string industry = 2;
+  repeated ClientStatus statuses = 3;
+  google.protobuf.Timestamp created_after = 4;
+  google.protobuf.Timestamp created_before = 5;
+  bool include_deleted = 6;
+}
+
+// Message representing sort options
+message SortOptions {
+  string field = 1;
+  bool ascending = 2;
+}
+
+// Request message for searching clients
+message SearchClientsRequest {
+  SearchCriteria criteria = 1;
+  SortOptions sort = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+// Response message for searching clients
+message SearchClientsResponse {
+  repeated Client clients = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+// Request message for archiving a client
+message ArchiveClientRequest {
+  string client_id = 1;
+  string reason = 2;
+}
+
+// Message representing an error
+message Error {
+  ErrorCode code = 1;
+  string message = 2;
+  string details = 3;
+  string field = 4;
+}
+
+// Enhanced service for managing client relationships with additional operations
+service CRMService {
+  // Creates a new client record with validation
+  rpc CreateClient(CreateClientRequest) returns (Client) {}
+
+  // Creates multiple client records in a single transaction
+  rpc BatchCreateClients(BatchCreateClientsRequest) returns (BatchCreateClientsResponse) {}
+
+  // Advanced search functionality with filtering and sorting
+  rpc SearchClients(SearchClientsRequest) returns (SearchClientsResponse) {}
+
+  // Archives a client record with reason
+  rpc ArchiveClient(ArchiveClientRequest) returns (Client) {}
+
+  // Additional utility methods
+  rpc GetClient(google.protobuf.StringValue) returns (Client) {}
+  rpc UpdateClient(Client) returns (Client) {}
+  rpc DeleteClient(google.protobuf.StringValue) returns (google.protobuf.Empty) {}
+  rpc RestoreClient(google.protobuf.StringValue) returns (Client) {}
+  rpc ListClients(google.protobuf.Empty) returns (SearchClientsResponse) {}
+}
