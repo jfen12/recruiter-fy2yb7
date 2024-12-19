@@ -1,0 +1,171 @@
+# Elasticsearch StatefulSet and Service configuration for RefactorTrack centralized logging
+# Version: Elasticsearch 8.0
+# Dependencies: 
+# - kubernetes v1.24+
+# - high-iops-ssd StorageClass from ../storage-class.yaml
+
+---
+# Headless service for Elasticsearch cluster discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch
+  namespace: refactortrack
+  labels:
+    app: refactortrack
+    component: logging
+    service: elasticsearch
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  clusterIP: None
+  ports:
+    - port: 9200
+      name: http
+      protocol: TCP
+      targetPort: 9200
+    - port: 9300
+      name: transport
+      protocol: TCP
+      targetPort: 9300
+  selector:
+    app: refactortrack
+    component: logging
+    service: elasticsearch
+  publishNotReadyAddresses: true
+
+---
+# StatefulSet for Elasticsearch cluster
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: elasticsearch
+  namespace: refactortrack
+  labels:
+    app: refactortrack
+    component: logging
+    service: elasticsearch
+spec:
+  serviceName: elasticsearch
+  replicas: 3
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: refactortrack
+      component: logging
+      service: elasticsearch
+  template:
+    metadata:
+      labels:
+        app: refactortrack
+        component: logging
+        service: elasticsearch
+    spec:
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      initContainers:
+        - name: fix-permissions
+          image: busybox:1.32
+          command: ["sh", "-c", "chown -R 1000:1000 /usr/share/elasticsearch/data"]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+        
+        - name: increase-vm-max-map
+          image: busybox:1.32
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          securityContext:
+            privileged: true
+        
+        - name: configure-sysctl
+          image: busybox:1.32
+          command: ["sh", "-c", "sysctl -w vm.swappiness=1"]
+          securityContext:
+            privileged: true
+
+      containers:
+        - name: elasticsearch
+          image: elasticsearch:8.0
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: "1"
+              memory: "4Gi"
+            limits:
+              cpu: "2"
+              memory: "6Gi"
+          ports:
+            - containerPort: 9200
+              name: http
+              protocol: TCP
+            - containerPort: 9300
+              name: transport
+              protocol: TCP
+          env:
+            - name: cluster.name
+              value: "refactortrack-logs"
+            - name: node.name
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: discovery.seed_hosts
+              value: "elasticsearch-0.elasticsearch,elasticsearch-1.elasticsearch,elasticsearch-2.elasticsearch"
+            - name: cluster.initial_master_nodes
+              value: "elasticsearch-0,elasticsearch-1,elasticsearch-2"
+            - name: ES_JAVA_OPTS
+              value: "-Xms2g -Xmx2g"
+            - name: xpack.security.enabled
+              value: "true"
+            - name: xpack.security.transport.ssl.enabled
+              value: "true"
+            - name: xpack.monitoring.collection.enabled
+              value: "true"
+            - name: node.roles
+              value: "master,data"
+            - name: bootstrap.memory_lock
+              value: "true"
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+            - name: elasticsearch-certs
+              mountPath: /usr/share/elasticsearch/config/certs
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /_cluster/health?local=true
+              port: 9200
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: transport
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            timeoutSeconds: 5
+
+      volumes:
+        - name: elasticsearch-certs
+          secret:
+            secretName: elasticsearch-certs
+            defaultMode: 0440
+
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: refactortrack
+          component: logging
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: high-iops-ssd
+        resources:
+          requests:
+            storage: 100Gi
