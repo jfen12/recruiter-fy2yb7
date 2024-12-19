@@ -1,0 +1,255 @@
+version: "3.9"
+
+# Global project name and environment variables
+x-project-name: &project-name ${COMPOSE_PROJECT_NAME:-refactortrack-production}
+
+# Common configurations to be reused across services
+x-common-config: &common-config
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "100m"
+      max-file: "5"
+      compress: "true"
+      labels: "production"
+  security_opt:
+    - no-new-privileges:true
+  read_only: true
+  ulimits:
+    nofile:
+      soft: 65536
+      hard: 65536
+  healthcheck:
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 40s
+
+services:
+  # Web Frontend Service
+  web:
+    <<: *common-config
+    build:
+      context: ./src/web
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: production
+    image: ${REGISTRY_URL}/refactortrack/web:${APP_VERSION}
+    ports:
+      - "443:443"
+    environment:
+      - NODE_ENV=production
+      - API_GATEWAY_URL=https://gateway:3000
+      - REACT_APP_VERSION=${APP_VERSION}
+    depends_on:
+      - gateway
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost/health"]
+    deploy:
+      replicas: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "1G"
+        reservations:
+          cpus: "0.5"
+          memory: "512M"
+    networks:
+      - refactortrack_production
+
+  # Analytics Service
+  analytics:
+    <<: *common-config
+    build:
+      context: ../backend/services/analytics
+      dockerfile: Dockerfile
+      args:
+        PYTHON_VERSION: "3.11"
+    image: ${REGISTRY_URL}/refactortrack/analytics:${APP_VERSION}
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONOPTIMIZE=2
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - REDIS_URL=redis://redis:6379
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "4G"
+        reservations:
+          cpus: "1.0"
+          memory: "2G"
+    networks:
+      - refactortrack_production
+
+  # Candidate Service
+  candidate:
+    <<: *common-config
+    build:
+      context: ../backend/services/candidate
+      dockerfile: Dockerfile
+      args:
+        NODE_VERSION: "18"
+    image: ${REGISTRY_URL}/refactortrack/candidate:${APP_VERSION}
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "2G"
+        reservations:
+          cpus: "0.5"
+          memory: "1G"
+    networks:
+      - refactortrack_production
+
+  # PostgreSQL Database
+  postgres:
+    <<: *common-config
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER_FILE=/run/secrets/postgres_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+      - POSTGRES_DB=refactortrack
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./config/postgres:/docker-entrypoint-initdb.d
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: "8G"
+        reservations:
+          cpus: "2.0"
+          memory: "4G"
+    networks:
+      - refactortrack_production
+
+  # MongoDB Document Store
+  mongodb:
+    <<: *common-config
+    image: mongo:6.0
+    command: ["mongod", "--auth", "--wiredTigerCacheSizeGB", "2"]
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME_FILE=/run/secrets/mongo_root_user
+      - MONGO_INITDB_ROOT_PASSWORD_FILE=/run/secrets/mongo_root_password
+    volumes:
+      - mongodb_data:/data/db
+      - ./config/mongodb:/docker-entrypoint-initdb.d
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "4G"
+        reservations:
+          cpus: "1.0"
+          memory: "2G"
+    networks:
+      - refactortrack_production
+
+  # Elasticsearch Search Engine
+  elasticsearch:
+    <<: *common-config
+    image: elasticsearch:8.0
+    environment:
+      - node.name=es01
+      - cluster.name=refactortrack-es
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD_FILE=/run/secrets/elastic_password
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: "8G"
+        reservations:
+          cpus: "2.0"
+          memory: "4G"
+    networks:
+      - refactortrack_production
+
+  # Redis Cache
+  redis:
+    <<: *common-config
+    image: redis:7.0-alpine
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./config/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "4G"
+        reservations:
+          cpus: "1.0"
+          memory: "2G"
+    networks:
+      - refactortrack_production
+
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: /data/postgres
+      o: bind
+    labels:
+      environment: production
+      backup: required
+      encryption: aes-256
+  mongodb_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  refactortrack_production:
+    driver: overlay
+    driver_opts:
+      encrypted: "true"
+    internal: true
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.16.0.0/16"
+    labels:
+      environment: production
+      security_level: high
+
+secrets:
+  postgres_user:
+    external: true
+  postgres_password:
+    external: true
+  mongo_root_user:
+    external: true
+  mongo_root_password:
+    external: true
+  elastic_password:
+    external: true
