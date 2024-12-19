@@ -1,0 +1,173 @@
+name: Web Application CI/CD
+
+# Trigger on push to main and pull requests targeting main
+on:
+  push:
+    branches: [main]
+    paths: ['src/web/**']
+  pull_request:
+    branches: [main]
+    paths: ['src/web/**']
+
+# Concurrency control to prevent parallel runs on same ref
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Environment variables
+env:
+  NODE_VERSION: '18'
+  DOCKER_IMAGE: refactortrack-web
+  DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+  CACHE_KEY_PREFIX: refactortrack-web
+
+jobs:
+  validate:
+    name: Validate and Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: src/web/yarn.lock
+          
+      - name: Install dependencies
+        working-directory: src/web
+        run: |
+          yarn install --frozen-lockfile
+          yarn audit
+          
+      - name: Type checking
+        working-directory: src/web
+        run: yarn typecheck
+        
+      - name: Lint code
+        working-directory: src/web
+        run: yarn lint
+        
+      - name: Run unit tests
+        working-directory: src/web
+        run: yarn test:coverage
+        
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@v3
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+          
+      - name: SonarQube analysis
+        uses: SonarSource/sonarqube-scan-action@v1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=refactortrack-web
+            -Dsonar.sources=src/web/src
+            -Dsonar.tests=src/web/src/__tests__
+            -Dsonar.typescript.lcov.reportPaths=src/web/coverage/lcov.info
+            
+      - name: Build application
+        working-directory: src/web
+        run: yarn build
+
+  build-image:
+    name: Build and Push Docker Image
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          platforms: linux/amd64,linux/arm64
+          
+      - name: Login to container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          
+      - name: Build and push image
+        uses: docker/build-push-action@v4
+        with:
+          context: src/web
+          file: src/web/Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ github.sha }}
+            ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest
+          cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:buildcache,mode=max
+          
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@v1
+        with:
+          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+  deploy:
+    name: Deploy to Environment
+    needs: build-image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: https://app.refactortrack.com
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+          
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig.yaml
+          chmod 600 kubeconfig.yaml
+          export KUBECONFIG=kubeconfig.yaml
+          
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl set image deployment/refactortrack-web \
+            web=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:${{ github.sha }} \
+            --record
+            
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/refactortrack-web --timeout=300s
+          
+      - name: Verify deployment
+        run: |
+          DEPLOY_STATUS=$(kubectl get deployment refactortrack-web -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')
+          if [ "$DEPLOY_STATUS" != "True" ]; then
+            kubectl rollout undo deployment/refactortrack-web
+            exit 1
+          fi
+          
+      - name: Cleanup
+        if: always()
+        run: rm -f kubeconfig.yaml
