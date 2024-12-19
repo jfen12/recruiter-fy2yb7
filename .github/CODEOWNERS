@@ -1,0 +1,59 @@
+# This file defines mandatory reviewers for different parts of the codebase
+# Format: pattern    @owner1 @owner2
+
+# Default owners for everything in the repo (if not overridden below)
+*    @platform-leads @security-team
+
+# Backend Services
+src/backend/services/analytics/*    @analytics-team @backend-leads @security-team
+src/backend/services/candidate/*    @recruiting-team @backend-leads @security-team
+src/backend/services/crm/*    @sales-team @backend-leads @security-team
+src/backend/services/requisition/*    @recruiting-team @backend-leads @security-team
+src/backend/services/gateway/*    @platform-team @backend-leads @security-team
+
+# Frontend Application
+src/web/*    @frontend-team @ui-leads @security-team
+
+# Infrastructure and DevOps
+infrastructure/*    @platform-team @devops-leads @security-team
+.github/workflows/*    @platform-team @devops-leads @security-team
+**/Dockerfile    @platform-team @security-team
+
+# Security Configurations
+config/security/*    @security-team @platform-leads
+
+# API Definitions
+**/*.proto    @backend-leads @security-team
+
+# Test Code
+**/test/**    @qa-team @security-team
+
+# Documentation
+docs/*    @technical-writers @platform-leads
+
+# Package Dependencies
+package.json    @platform-team @security-team
+package-lock.json    @platform-team @security-team
+yarn.lock    @platform-team @security-team
+
+# Database Migrations
+**/migrations/*    @database-team @security-team
+
+# Security-sensitive Areas
+**/auth/**    @security-team @backend-leads
+**/encryption/**    @security-team @backend-leads
+**/credentials/**    @security-team @platform-leads
+
+# Configuration Files
+*.config.js    @platform-team @security-team
+*.conf    @platform-team @security-team
+*.yml    @platform-team @security-team
+*.yaml    @platform-team @security-team
+
+# Ensure Security Team Reviews All Environment Files
+.env*    @security-team @platform-leads
+**/config/*    @platform-team @security-team
+
+# Legal and Compliance
+LICENSE    @legal-team @security-team
+SECURITY.md    @security-team
