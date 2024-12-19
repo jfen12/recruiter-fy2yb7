@@ -1,0 +1,88 @@
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Environment and Configuration
+.env*
+.env.local
+.env.development
+.env.test
+.env.production
+*.config.js
+nodemon.json
+.eslintrc*
+.prettierrc*
+tsconfig*.json
+
+# Version Control
+.git
+.gitignore
+.gitattributes
+
+# Build and Output
+dist
+build
+coverage
+.nyc_output
+
+# Testing
+__tests__
+**/*.test.ts
+**/*.spec.ts
+**/*.test.js
+**/*.spec.js
+jest.config.*
+
+# IDE and Editor
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+docs
+CHANGELOG
+LICENSE
+CONTRIBUTING
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Logs and Debug
+*.log
+logs
+debug
+
+# Development Tools
+.editorconfig
+.eslintcache
+.eslintignore
+.prettierignore
+.travis.yml
+.circleci
+.github
+
+# Temporary Files
+tmp
+temp
+.tmp
+*.tmp
+
+# Miscellaneous
+.husky
+.commitlintrc*
+.lintstagedrc*
+sonar-project.properties
+junit.xml
+README*
+CHANGELOG*
+CONTRIBUTING*
+HISTORY*
