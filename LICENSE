@@ -1,0 +1,122 @@
+REFACTORTRACK PROPRIETARY SOFTWARE LICENSE AGREEMENT
+Version 1.0, Effective Date: 2024
+
+IMPORTANT: READ THIS AGREEMENT CAREFULLY BEFORE USING THE SOFTWARE. THIS IS A LEGAL AGREEMENT BETWEEN YOU (THE "LICENSEE") AND REFACTORTRACK (THE "LICENSOR").
+
+1. DEFINITIONS
+
+1.1. "Software" means the RefactorTrack Applicant Tracking System software, including all components, updates, and documentation.
+1.2. "Documentation" means all user guides, manuals, and technical specifications provided with the Software.
+1.3. "Intellectual Property Rights" means all patents, copyrights, trademarks, trade secrets, and other proprietary rights.
+1.4. "License Key" means the unique authentication credential provided for Software activation.
+
+2. GRANT OF LICENSE
+
+2.1. Subject to the terms and conditions of this Agreement, Licensor grants Licensee a non-exclusive, non-transferable, revocable license to:
+   a) Use the Software in binary form only
+   b) Access the Software through approved APIs
+   c) Use the Documentation for internal business purposes
+   d) Deploy the Software in approved environments (Development, Staging, Production)
+
+2.2. License Restrictions. Licensee shall not:
+   a) Modify, reverse engineer, decompile, or disassemble the Software
+   b) Distribute, sublicense, lease, rent, or loan the Software
+   c) Remove or alter any proprietary notices or marks
+   d) Use the Software beyond licensed parameters
+
+3. INTELLECTUAL PROPERTY RIGHTS
+
+3.1. Ownership
+   a) Software and Documentation remain exclusive property of Licensor
+   b) Trademarks and logos are protected under trademark law
+   c) Data models and algorithms are protected trade secrets
+
+3.2. Protected Components
+   a) Source code: Full copyright protection, no access granted
+   b) Documentation: Confidential, licensed users only
+   c) Artwork: Trademark protected, unmodifiable
+   d) APIs: Usage as documented only
+
+4. COMPLIANCE AND AUDIT
+
+4.1. License Validation
+   a) Quarterly usage reporting required
+   b) License key validation mandatory
+   c) API access monitoring enabled
+
+4.2. Audit Rights
+   a) Annual compliance audits with 30 days notice
+   b) Access to usage logs and deployment information
+   c) Cooperation with audit procedures required
+
+5. WARRANTY AND LIABILITY
+
+5.1. Warranty Disclaimer
+   SOFTWARE PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
+
+5.2. Limitation of Liability
+   a) Liability limited to license fees paid
+   b) No liability for consequential damages
+   c) Exclusions: gross negligence, willful misconduct
+
+5.3. Indemnification
+   Licensee shall indemnify Licensor against third-party claims arising from use.
+
+6. TERM AND TERMINATION
+
+6.1. Term
+   a) Annual subscription basis
+   b) Automatic renewal with good standing
+   c) 30 days written notice for non-renewal
+
+6.2. Termination
+   a) Immediate upon breach of terms
+   b) Return or destruction of all Software copies
+   c) Survival of confidentiality obligations
+
+7. GENERAL PROVISIONS
+
+7.1. Governing Law
+   Agreement governed by laws of Licensor's state of incorporation.
+
+7.2. Dispute Resolution
+   a) Mandatory arbitration for disputes
+   b) Venue in agreed jurisdiction courts
+   c) Prevailing party entitled to reasonable fees
+
+7.3. Security Compliance
+   a) Adherence to security policies in SECURITY.md
+   b) Maintenance of access controls
+   c) Prompt security incident reporting
+
+8. SUPPORT AND MAINTENANCE
+
+8.1. Support Services
+   a) As defined in separate Service Level Agreement
+   b) Technical support via designated channels
+   c) Updates and patches as released
+
+8.2. Service Levels
+   a) Response times per SLA
+   b) Uptime guarantees per SLA
+   c) Maintenance windows as scheduled
+
+9. ACKNOWLEDGMENT
+
+BY USING THE SOFTWARE, LICENSEE ACKNOWLEDGES READING AND AGREEING TO THE TERMS OF THIS LICENSE AGREEMENT.
+
+For RefactorTrack:
+Name: ______________________
+Title: ______________________
+Date: ______________________
+
+For Licensee:
+Company: ___________________
+Name: ______________________
+Title: ______________________
+Date: ______________________
+
+Contact Information:
+RefactorTrack
+[Address]
+Email: legal@refactortrack.com
