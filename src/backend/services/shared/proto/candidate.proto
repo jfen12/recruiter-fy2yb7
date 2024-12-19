@@ -1,0 +1,211 @@
+// Protocol buffer definition for candidate data structures and services
+// Version: 1.0.0
+// Last Updated: 2023
+// Purpose: Defines messages and services for candidate-related operations in RefactorTrack ATS
+
+syntax = "proto3";
+
+package candidate;
+
+import "google/protobuf/timestamp.proto";  // v3.0.0 - For timestamp fields
+import "google/protobuf/empty.proto";      // v3.0.0 - For void responses
+import "google/protobuf/field_mask.proto"; // v3.0.0 - For partial updates
+
+// Package options for different language implementations
+option go_package = "./candidate";
+option java_multiple_files = true;
+option java_package = "com.refactortrack.proto.candidate";
+option csharp_namespace = "RefactorTrack.Proto.Candidate";
+
+// Enum defining possible candidate statuses
+enum CandidateStatus {
+  // Default unspecified status - should not be used directly
+  CANDIDATE_STATUS_UNSPECIFIED = 0;
+  // Active and available for opportunities
+  CANDIDATE_STATUS_ACTIVE = 1;
+  // Temporarily inactive or unavailable
+  CANDIDATE_STATUS_INACTIVE = 2;
+  // Successfully placed in a position
+  CANDIDATE_STATUS_PLACED = 3;
+  // Blacklisted due to policy violations
+  CANDIDATE_STATUS_BLACKLISTED = 4;
+  // Archived for historical reference
+  CANDIDATE_STATUS_ARCHIVED = 5;
+}
+
+// Enum defining skill proficiency levels
+enum SkillProficiency {
+  // Default unspecified proficiency - should not be used directly
+  SKILL_PROFICIENCY_UNSPECIFIED = 0;
+  // Basic understanding and limited experience
+  SKILL_PROFICIENCY_BEGINNER = 1;
+  // Working knowledge with practical experience
+  SKILL_PROFICIENCY_INTERMEDIATE = 2;
+  // Strong competency with extensive experience
+  SKILL_PROFICIENCY_ADVANCED = 3;
+  // Subject matter expert with deep expertise
+  SKILL_PROFICIENCY_EXPERT = 4;
+}
+
+// Message representing a technical skill with proficiency
+message Skill {
+  // Unique identifier for the skill
+  string id = 1;
+  // Name of the skill (e.g., "Java", "Python")
+  string name = 2;
+  // Proficiency level in this skill
+  SkillProficiency proficiency = 3;
+  // Years of experience with this skill
+  int32 years_of_experience = 4;
+  // Last used date for the skill
+  google.protobuf.Timestamp last_used = 5;
+  // Additional skill-specific metadata
+  map<string, string> metadata = 6;
+}
+
+// Message representing work experience
+message Experience {
+  // Unique identifier for the experience entry
+  string id = 1;
+  // Company or organization name
+  string company_name = 2;
+  // Job title or role
+  string title = 3;
+  // Start date of the experience
+  google.protobuf.Timestamp start_date = 4;
+  // End date of the experience (null if current)
+  google.protobuf.Timestamp end_date = 5;
+  // Detailed description of responsibilities
+  string description = 6;
+  // Skills utilized in this role
+  repeated string skill_ids = 7;
+  // Additional experience metadata
+  map<string, string> metadata = 8;
+}
+
+// Message representing educational background
+message Education {
+  // Unique identifier for the education entry
+  string id = 1;
+  // Institution name
+  string institution = 2;
+  // Degree or certification obtained
+  string degree = 3;
+  // Field of study
+  string field_of_study = 4;
+  // Start date of education
+  google.protobuf.Timestamp start_date = 5;
+  // End date of education (null if current)
+  google.protobuf.Timestamp end_date = 6;
+  // Additional education metadata
+  map<string, string> metadata = 7;
+}
+
+// Message representing a complete candidate profile
+message Candidate {
+  // Unique identifier for the candidate
+  string id = 1;
+  // First name (GDPR-sensitive)
+  string first_name = 2;
+  // Last name (GDPR-sensitive)
+  string last_name = 3;
+  // Email address (GDPR-sensitive)
+  string email = 4;
+  // Phone number (GDPR-sensitive)
+  string phone = 5;
+  // Technical skills and proficiencies
+  repeated Skill skills = 6;
+  // Work experience history
+  repeated Experience experience = 7;
+  // Educational background
+  repeated Education education = 8;
+  // Current candidate status
+  CandidateStatus status = 9;
+  // Record creation timestamp
+  google.protobuf.Timestamp created_at = 10;
+  // Last update timestamp
+  google.protobuf.Timestamp updated_at = 11;
+  // Optimistic locking version
+  string version = 12;
+  // Additional candidate metadata
+  map<string, string> metadata = 13;
+}
+
+// Request message for retrieving a candidate
+message GetCandidateRequest {
+  // Candidate identifier
+  string id = 1;
+  // Optional field mask for partial responses
+  google.protobuf.FieldMask field_mask = 2;
+}
+
+// Request message for creating a candidate
+message CreateCandidateRequest {
+  // Candidate data to create
+  Candidate candidate = 1;
+}
+
+// Request message for updating a candidate
+message UpdateCandidateRequest {
+  // Candidate data to update
+  Candidate candidate = 1;
+  // Fields to update (partial update support)
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// Request message for listing candidates
+message ListCandidatesRequest {
+  // Maximum number of results to return
+  int32 page_size = 1;
+  // Token for pagination
+  string page_token = 2;
+  // Optional filter criteria
+  string filter = 3;
+  // Optional field mask for partial responses
+  google.protobuf.FieldMask field_mask = 4;
+}
+
+// Response message for listing candidates
+message ListCandidatesResponse {
+  // List of candidates
+  repeated Candidate candidates = 1;
+  // Token for next page
+  string next_page_token = 2;
+  // Total count of matching candidates
+  int32 total_size = 3;
+}
+
+// Service definition for candidate management
+service CandidateService {
+  // Retrieves a candidate by ID
+  rpc GetCandidate(GetCandidateRequest) returns (Candidate) {
+    option (google.api.http).get = "/v1/candidates/{id}";
+    option (google.api.method_signature) = "id,field_mask";
+  }
+
+  // Creates a new candidate
+  rpc CreateCandidate(CreateCandidateRequest) returns (Candidate) {
+    option (google.api.http) = {
+      post: "/v1/candidates"
+      body: "candidate"
+    };
+  }
+
+  // Updates an existing candidate
+  rpc UpdateCandidate(UpdateCandidateRequest) returns (Candidate) {
+    option (google.api.http) = {
+      patch: "/v1/candidates/{candidate.id}"
+      body: "candidate"
+    };
+  }
+
+  // Deletes a candidate
+  rpc DeleteCandidate(GetCandidateRequest) returns (google.protobuf.Empty) {
+    option (google.api.http).delete = "/v1/candidates/{id}";
+  }
+
+  // Lists candidates with filtering and pagination
+  rpc ListCandidates(ListCandidatesRequest) returns (ListCandidatesResponse) {
+    option (google.api.http).get = "/v1/candidates";
+  }
+}
