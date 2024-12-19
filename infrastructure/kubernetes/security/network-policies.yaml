@@ -1,0 +1,134 @@
+# kubernetes v1.24+
+# Purpose: Network security policies implementing zero-trust model with granular access controls
+# for RefactorTrack microservices communication
+
+---
+# Default deny-all policy to establish zero-trust baseline
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: refactortrack
+  labels:
+    app: refactortrack
+    component: security
+    type: network-policy
+  annotations:
+    description: "Default deny-all policy implementing zero-trust model"
+    security.refactortrack.com/policy-type: baseline
+spec:
+  podSelector: {} # Applies to all pods in namespace
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# API Gateway ingress policy for external access
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-ingress
+  namespace: refactortrack
+  labels:
+    app: refactortrack
+    component: gateway
+    type: network-policy
+  annotations:
+    description: "Controls external access to API gateway"
+    security.refactortrack.com/policy-type: ingress-control
+spec:
+  podSelector:
+    matchLabels:
+      app: gateway-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8     # Private network ranges
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 8000
+
+---
+# Inter-service communication policy for microservices
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: microservices-communication
+  namespace: refactortrack
+  labels:
+    app: refactortrack
+    component: microservices
+    type: network-policy
+  annotations:
+    description: "Controls inter-service communication patterns"
+    security.refactortrack.com/policy-type: service-mesh
+spec:
+  podSelector:
+    matchExpressions:
+      - key: component
+        operator: In
+        values:
+          - analytics
+          - candidate
+          - crm
+          - requisition
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway-service
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: analytics-service
+      ports:
+        - protocol: TCP
+          port: 8000
+
+---
+# Database access policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: database-access
+  namespace: refactortrack
+  labels:
+    app: refactortrack
+    component: database
+    type: network-policy
+  annotations:
+    description: "Controls database access patterns"
+    security.refactortrack.com/policy-type: data-access
+spec:
+  podSelector:
+    matchLabels:
+      app: database
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: component
+                operator: In
+                values:
+                  - analytics
+                  - candidate
+                  - crm
+                  - requisition
+      ports:
+        - protocol: TCP
+          port: 5432
