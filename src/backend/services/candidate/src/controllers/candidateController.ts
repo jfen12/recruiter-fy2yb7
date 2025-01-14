@@ -11,9 +11,10 @@ import rateLimit from 'express-rate-limit'; // v6.7.0
 
 import { CandidateService } from '../services/candidateService';
 import { ICandidate } from '../interfaces/candidate.interface';
-import { validateCandidateRequest, validateCandidateIdParam } from '../middleware/validation.middleware';
+import { validateCandidateRequest, validateCandidateIdParam, validateSearchParams } from '../middleware/validation.middleware';
 import { Logger } from '../../../shared/utils/logger';
 import { ApiResponse } from '../../../shared/types/common.types';
+import { CandidateSearchService } from '../services/searchService';
 
 // Rate limiting configuration
 const rateLimiter = rateLimit({
@@ -28,10 +29,12 @@ const rateLimiter = rateLimit({
  */
 export class CandidateController {
   private candidateService: CandidateService;
+  private searchService: CandidateSearchService;
   private logger: Logger;
 
   constructor() {
     this.candidateService = Container.get(CandidateService);
+    this.searchService = Container.get(CandidateSearchService);
     this.logger = new Logger('candidate-controller');
   }
 
@@ -214,6 +217,7 @@ export class CandidateController {
    */
   public searchCandidates = [
     rateLimiter,
+    validateSearchParams,
     async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       try {
@@ -227,7 +231,7 @@ export class CandidateController {
 
         this.logger.info('Searching candidates', { searchParams });
 
-        const searchResult = await this.candidateService.searchCandidates(searchParams);
+        const searchResult = await this.searchService.searchCandidates(searchParams);
 
         const response: ApiResponse<ICandidate[]> = {
           data: searchResult.items,

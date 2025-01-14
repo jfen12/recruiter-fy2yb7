@@ -287,4 +287,47 @@ describe('CandidateService Integration Tests', () => {
       expect(searchResult.total).toBe(0);
     });
   });
+
+  describe('searchCandidates API', () => {
+    it('should return candidates based on search query', async () => {
+      const candidate = await candidateService.createCandidate(createTestCandidate({
+        skills: [{
+          skill_id: '123e4567-e89b-12d3-a456-426614174000',
+          years_of_experience: 5,
+          proficiency_level: 'ADVANCED'
+        }]
+      }));
+
+      // Allow time for indexing
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const response = await candidateService.searchCandidates({
+        query: 'John',
+        skills: ['123e4567-e89b-12d3-a456-426614174000'],
+        page: 1,
+        limit: 10
+      });
+
+      expect(response.items).toHaveLength(1);
+      expect(response.items[0].id).toBe(candidate.id);
+    });
+
+    it('should handle pagination correctly', async () => {
+      const candidates = Array(20).fill(null).map(() => createTestCandidate());
+      await Promise.all(candidates.map(c => candidateService.createCandidate(c)));
+
+      // Allow time for indexing
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const response = await candidateService.searchCandidates({
+        query: '',
+        page: 2,
+        limit: 10
+      });
+
+      expect(response.items).toHaveLength(10);
+      expect(response.page).toBe(2);
+      expect(response.limit).toBe(10);
+    });
+  });
 });
