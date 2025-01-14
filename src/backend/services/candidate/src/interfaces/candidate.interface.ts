@@ -101,6 +101,30 @@ export interface ICandidate extends BaseEntity {
 }
 
 /**
+ * Interface for search query parameters
+ */
+export interface ISearchQueryParams {
+  query: string;
+  skills?: string[];
+  status?: CandidateStatus;
+  experience?: {
+    min: number;
+    max: number;
+  };
+  location?: {
+    city?: string;
+    country?: string;
+    remote?: boolean;
+  };
+  page: number;
+  limit: number;
+  sort?: {
+    field: string;
+    order: 'asc' | 'desc';
+  };
+}
+
+/**
  * Zod validation schema for work experience
  */
 export const workExperienceSchema = z.object({
